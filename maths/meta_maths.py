@@ -34,7 +34,8 @@ def query_ai_replicate(expression):
             "stop_sequences": "<|end_of_text|>,<|eot_id|>",
             "prompt_template": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
             "presence_penalty": 1.15,
-            "log_performance_metrics": False
+            "log_performance_metrics": False,
+            "verify": False,
         },
     ):
         response.append(str(event))
@@ -106,9 +107,13 @@ def generate_multiplication_expression(out_digits=7):
         expr = f'{a}*{b}'
     return expr
     
-def generate_and_evaluate(n_agents, n_ops, max_int, savedir=None):
-    # expression = generate_ooo_expression(n_ops, max_int)
-    expression = generate_multiplication_expression(max_int)
+def generate_and_evaluate(n_agents, n_ops, max_int, savedir=None, mult_or_ooo = 'oop'):
+    if mult_or_ooo == 'ooo':
+        expression = generate_ooo_expression(n_ops, max_int)
+    elif mult_or_ooo == 'mult':
+        expression = generate_multiplication_expression(max_int)
+    else:
+        raise ValueError('mult_or_ooo must be "ooo" or "mult"')
     responses = ask_ensemble(n_agents,expression)
     print(f'finished expression {expression}')
     if savedir is not None:
@@ -123,11 +128,11 @@ def generate_and_evaluate(n_agents, n_ops, max_int, savedir=None):
     return expression, responses
     
     
-def take_exam(n_questions, n_agents, n_ops, max_int, savedir=None):
+def take_exam(n_questions, n_agents, n_ops, max_int, savedir=None, mult_or_ooo = 'ooo'):
     if not os.path.exists(savedir):
         os.makedirs(savedir)
     with Pool(8) as p:
-        results = p.starmap(generate_and_evaluate, [(n_agents, n_ops, max_int, savedir) for _ in range(n_questions)])
+        results = p.starmap(generate_and_evaluate, [(n_agents, n_ops, max_int, savedir, mult_or_ooo) for _ in range(n_questions)])
     return results
 
 def calc_mode(responses):
@@ -174,7 +179,13 @@ def normalized_entropy(responses):
 
 def simple_entropy(responses):
     responses = np.array(responses).T
-    return [len(np.unique(responses[:,i])) / len(responses) for i in range(responses.shape[1])]
+    return [(len(np.unique(responses[:,i])) - 1) / len(responses) for i in range(responses.shape[1])]
+
+def fmax(responses, difficulty):
+    uncertainty = np.array(simple_entropy(responses))
+    confusion = (np.array(difficulty) - np.array(uncertainty))/(1 - np.array(uncertainty))
+    fmax = (1-uncertainty)*(np.array([max(c, 1-c) for c in confusion]))
+    return fmax
 
 
 if __name__ == '__main__':
